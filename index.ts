@@ -68,7 +68,9 @@ export default Plugin.define({
           additionalProperties: false,
         },
         options: { namespace: "deepseek" },
-        execute: async ({ url }: { url: string }, context: { signal: AbortSignal }) => {
+        execute: async (input, context) => {
+          const url = (input as { url?: unknown } | null)?.url
+          if (typeof url !== "string" || !url) throw new Error("deepseek.fetch requires a `url` string")
           const page = await fetchPage(key, url, context.signal)
           return { content: `# ${page.title}\n\n${page.content}` }
         },
