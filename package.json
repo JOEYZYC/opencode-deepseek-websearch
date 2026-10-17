@@ -1,0 +1,41 @@
+{
+  "name": "opencode-deepseek-websearch",
+  "version": "0.1.0",
+  "description": "DeepSeek Search provider and Fetch tool for OpenCode",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "main": "index.ts",
+  "files": [
+    "index.ts",
+    "deepseek.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "deepseek",
+    "websearch",
+    "search",
+    "fetch"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JOEYZYC/opencode-deepseek-websearch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JOEYZYC/opencode-deepseek-websearch/issues"
+  },
+  "homepage": "https://github.com/JOEYZYC/opencode-deepseek-websearch#readme",
+  "peerDependencies": {
+    "@opencode/plugin": ">=2.0.32"
+  },
+  "peerDependenciesMeta": {
+    "@opencode/plugin": {
+      "optional": true
+    }
+  }
+}
