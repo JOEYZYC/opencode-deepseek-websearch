@@ -1,28 +1,36 @@
 # opencode-deepseek-websearch
 
-DeepSeek's [Search and Fetch APIs](https://api-docs.deepseek.com/zh-cn/guides/search) for OpenCode: a native `websearch` provider plus a `deepseek.fetch` tool.
+**English** | [简体中文](README.zh-CN.md)
 
-Unofficial. Not affiliated with DeepSeek or OpenCode.
+[DeepSeek's Search and Fetch APIs](https://api-docs.deepseek.com/zh-cn/guides/search) for OpenCode, wired in as a native `websearch` provider and a `deepseek.fetch` tool.
 
-## What it does
+![license](https://img.shields.io/badge/license-MIT-blue)
+![OpenCode](https://img.shields.io/badge/OpenCode-v2-000000)
+![plugin API](https://img.shields.io/badge/%40opencode%2Fplugin-%3E%3D2.0.32-6e56cf)
 
-- **Search** — registers a `websearch` provider with id `deepseek`, backed by `POST /v1/tools/search`. Models use OpenCode's built-in `websearch` tool as usual.
-- **Fetch** — registers a tool `deepseek.fetch` (effective name `deepseek_fetch`), backed by `POST /v1/tools/fetch`. Returns the page title and Markdown body.
+> Unofficial. Not affiliated with DeepSeek or OpenCode.
 
-Search results are capped to keep context small: 8 results by default, `snippet` at 300 chars, `summary` at 1200 chars.
+## Why
+
+- **Search that any model can use.** Results come back through OpenCode's built-in `websearch` tool, so you don't need a DeepSeek model to get DeepSeek results.
+- **Read the source, not just the snippet.** `deepseek.fetch` returns the full page as Markdown with its title.
+- **Small by default.** 8 results per query, snippets capped at 300 characters, summaries at 1200. Searching shouldn't cost you half a context window.
+- **No SDK, no build step.** Plain TypeScript that OpenCode loads directly.
 
 ## Requirements
 
 - OpenCode v2 (plugin API `@opencode/plugin` >= 2.0.32)
-- A DeepSeek API key with access to the tools endpoints
+- A DeepSeek API key with access to the `/v1/tools/*` endpoints
 
 ## Install
 
-Clone and point OpenCode at the directory:
+Clone the repo somewhere stable:
 
 ```bash
 git clone https://github.com/JOEYZYC/opencode-deepseek-websearch.git
 ```
+
+Point OpenCode at the directory and make DeepSeek the default search provider:
 
 ```jsonc
 // opencode.jsonc
@@ -37,23 +45,40 @@ git clone https://github.com/JOEYZYC/opencode-deepseek-websearch.git
 }
 ```
 
-Or provide the key through the environment and omit `apiKeyFile`:
+`apiKeyFile` is read verbatim, so use an absolute path. The key is loaded once at startup.
+
+Or skip the file and use the environment:
 
 ```bash
 DEEPSEEK_API_KEY=sk-...
 ```
 
-`apiKeyFile` is not expanded, so pass an absolute path. The key is read once at plugin setup.
+The environment variable wins if both are set. Setup fails loudly with a clear message when neither is available.
+
+<details>
+<summary>Alternative: drop-in plugin directory</summary>
+
+OpenCode also auto-loads plugins from `~/.config/opencode/plugins/`. Copy `index.ts` and `deepseek.ts` into `plugins/deepseek-web/` to get the same provider without a config entry.
+
+One catch: auto-loaded plugins don't receive `plugins[].options`, so `apiKeyFile` and `count` are unavailable there — set `DEEPSEEK_API_KEY` instead and accept the default count.
+
+</details>
 
 ## Usage
 
-Ask for current information; the model calls `websearch` and gets DeepSeek results with URLs. To read a specific page:
+Ask for current information. The model calls `websearch` and gets DeepSeek results with URLs:
+
+```
+What changed in the DeepSeek API this month?
+```
+
+To read a specific page:
 
 ```
 deepseek.fetch({ "url": "https://api-docs.deepseek.com/zh-cn/guides/search" })
 ```
 
-In Code Mode the tool is reachable as `tools.deepseek.fetch`.
+The tool returns `# <title>` followed by the page body as Markdown. In Code Mode it is reachable as `tools.deepseek.fetch`.
 
 ### Options
 
@@ -62,9 +87,9 @@ In Code Mode the tool is reachable as `tools.deepseek.fetch`.
 | `apiKeyFile` | string | — | Absolute path to a file containing the API key |
 | `count` | number | `8` | Search results per query, clamped to 1-50 |
 
-## Restrict to one agent
+## Restrict it to one agent
 
-The plugin registers its tools globally. To allow search only for a research agent, deny it globally and allow it per agent:
+The plugin registers its tools globally. To let only a research agent search, deny globally and allow per agent:
 
 ```jsonc
 {
@@ -85,6 +110,15 @@ The plugin registers its tools globally. To allow search only for a research age
 
 The later agent rule overrides the global deny.
 
+## How it works
+
+| Piece | Endpoint | Notes |
+|---|---|---|
+| `websearch` provider `deepseek` | `POST /v1/tools/search` | Sends `{ query, count, need_content: false }`, maps `results[]` to URL / title / snippet / summary / date |
+| `deepseek.fetch` | `POST /v1/tools/fetch` | Sends `{ url }`, returns title plus extracted Markdown |
+
+Non-2xx responses are surfaced as errors with the status and the first 300 characters of the body. There are no retries.
+
 ## Cost and limits
 
 Pricing from the DeepSeek docs (October 2026):
@@ -95,11 +129,27 @@ Pricing from the DeepSeek docs (October 2026):
 
 These endpoints are separate from models: any model can use them, and `deepseek-flash` works fine. Only DeepSeek's server-side `web_search` tool in the Responses API is limited to `deepseek-v4-pro`.
 
+## Troubleshooting
+
+**`set DEEPSEEK_API_KEY or plugins[].options.apiKeyFile` on startup** — no key was found. Check that the env var is visible to the OpenCode process, or that `apiKeyFile` is absolute and readable. The key is read once, so restart after changing it.
+
+**HTTP 401 / 403** — the key lacks access to the tools endpoints.
+
+**HTTP 429** — you hit the 5 QPS limit. Calls are not retried; wait or batch your queries.
+
+**Fetch returns little or nothing** — the page has no extractable body. PDFs and Office files are not supported.
+
 ## Notes
 
 - Unofficial and experimental. DeepSeek may change `/v1/tools/*`, and OpenCode's plugin API may change between major versions.
-- No retries are implemented; HTTP 408, 429, and 5xx are surfaced as errors so the caller can decide.
-- Fetch only handles pages whose content can be extracted as Markdown. PDFs and Office files are not supported.
+- No telemetry, no proxy, no caching: requests go straight from your machine to `api.deepseek.com`.
+- Fetch swallows the whole page, unlike search results which are trimmed. Long documents will be long.
+
+## Development
+
+There is no build step — OpenCode loads the TypeScript sources directly. Edit `index.ts` or `deepseek.ts`, restart OpenCode, and the new code is live. Point `plugins[].package` at this checkout while developing.
+
+Tests and type checking are not set up yet.
 
 ## License
 
